@@ -80,7 +80,7 @@ const ChatScreen = () => {
       updateTaskStatus(taskMsgId, 'thinkingComplete');
       
       // Wait a bit for visual effect
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(() => r(undefined), 200));
 
       let dslString = '';
 

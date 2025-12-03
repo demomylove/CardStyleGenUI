@@ -50,8 +50,8 @@ export class WidgetMapper {
           <View
             style={{
               flexDirection: 'column',
-              alignItems: this.crossAxisAlignment(props.cross_axis_alignment),
-              justifyContent: this.mainAxisAlignment(props.main_axis_alignment),
+              alignItems: this.crossAxisAlignment(props.cross_axis_alignment) as any,
+              justifyContent: this.mainAxisAlignment(props.main_axis_alignment) as any,
               padding: this.parsePadding(props.padding),
               backgroundColor: props.background_color,
             }}
@@ -66,8 +66,8 @@ export class WidgetMapper {
           <View
             style={{
               flexDirection: 'row',
-              alignItems: this.crossAxisAlignment(props.cross_axis_alignment),
-              justifyContent: this.mainAxisAlignment(props.main_axis_alignment),
+              alignItems: this.crossAxisAlignment(props.cross_axis_alignment) as any,
+              justifyContent: this.mainAxisAlignment(props.main_axis_alignment) as any,
               padding: this.parsePadding(props.padding),
               // spacing is handled by gap in newer RN or margin on children
               gap: props.spacing, 
@@ -106,8 +106,8 @@ export class WidgetMapper {
         return (
           <View
             style={{
-              alignItems: type === 'Center' ? 'center' : this.parseAlignment(props.alignment).alignItems,
-              justifyContent: type === 'Center' ? 'center' : this.parseAlignment(props.alignment).justifyContent,
+              alignItems: (type === 'Center' ? 'center' : this.parseAlignment(props.alignment).alignItems) as any,
+              justifyContent: (type === 'Center' ? 'center' : this.parseAlignment(props.alignment).justifyContent) as any,
               width: '100%', // Align usually takes full width
             }}
           >
