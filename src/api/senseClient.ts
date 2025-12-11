@@ -1,10 +1,52 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://10.210.0.58:21683';
-const OMPHALOS_URL = `${BASE_URL}/intention_v2/omphalos`;
-const WEATHER_URL = `${BASE_URL}/novel/agent/weather/search`;
-const MUSIC_URL = `${BASE_URL}/novel/agent/music_recom_by_mood`;
-const POI_URL = `${BASE_URL}/novel/agent/poi/search/v2`;
+const BASE_URL_LEGACY = 'http://10.210.0.58:21683';
+const OMPHALOS_URL = `${BASE_URL_LEGACY}/intention_v2/omphalos`; // Omphalos seems common or legacy-only? keeping as is for now
+
+// Environment Configuration
+type EnvType = 'DEV' | 'PROD' | 'LEGACY';
+const CURRENT_ENV: EnvType = 'DEV'; // Change this to 'DEV', 'PROD', or 'LEGACY'
+
+const HOST_DEV = "https://innovation-dev.senseauto.com:31684";
+const HOST_PROD = "https://innovation.senseauto.com:80";
+const HOST_LEGACY = BASE_URL_LEGACY;
+
+const getHost = () => {
+    switch (CURRENT_ENV) {
+        case 'PROD': return HOST_PROD;
+        case 'LEGACY': return HOST_LEGACY;
+        case 'DEV': default: return HOST_DEV;
+    }
+};
+const HOST = getHost();
+
+// Weather
+const WEATHER_URL = CURRENT_ENV === 'LEGACY' 
+    ? `${HOST}/novel/agent/weather/search` 
+    : `${HOST}/novel/agent/weather/search/v1`;
+
+// Music / Media
+const MUSIC_URL = CURRENT_ENV === 'LEGACY'
+    ? `${HOST}/novel/agent/music_recom_by_mood`
+    : `${HOST}/novel/agent/music/recommend/v1`;
+
+export const MEDIAQA_URL = `${HOST}/novel/agent/music_qa`;
+export const MIAOHUA_URL = `${HOST}/novel/agent/miaohua`;
+export const XIMALAYA_URL = `${HOST}/novel/agent/ximalaya`;
+
+// POI
+const POI_URL = CURRENT_ENV === 'LEGACY'
+    ? `${HOST}/novel/agent/poi/search/v2`
+    : `${HOST}/novel/agent/poi/search/v1`;
+
+export const POI_SEARCH_AROUND_URL = `${HOST}/novel/agent/poi/search_around_view/v1`;
+export const POI_PLANNING_URL = `${HOST}/novel/agent/poi/poi_planning`;
+export const POI_FILTER_SEARCH_URL = `${HOST}/novel/agent/poi/filter_search/v2`;
+export const POI_FIND_BY_NAME_URL = `${HOST}/novel/agent/poi/find_by_name`;
+export const GET_CURRENT_ADDRESS_URL = `${HOST}/novel/agent/poi/get_current_address`;
+
+// Chat
+export const CHAT_URL = `${HOST}/novel/agent/chat/v1`;
 
 const getQueryParams = (input: string) => ({
   user_query: input,
@@ -19,8 +61,13 @@ const getQueryParams = (input: string) => ({
   context_info: [],
 });
 
+// Common headers from C++ reference
+const COMMON_HEADERS = {
+    'Content-Type': 'application/json',
+    'apikey': 'iirzcvKiVDXCwdJzBf9ksw==' 
+};
+
 // Helper to parse DSL from POI/Music/Weather responses
-import { TEMPLATES } from '../dsl/templates';
 
 export const getDsl = (domain: string, content: any): string => {
   if (domain === 'weather') {
@@ -75,17 +122,19 @@ const streamRequest = (
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
-    xhr.setRequestHeader('Content-Type', 'application/json');
+    // Use common headers
+    Object.entries(COMMON_HEADERS).forEach(([key, value]) => {
+        xhr.setRequestHeader(key, value);
+    });
     
     let seenBytes = 0;
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 3) { // Loading (Streaming)
-        // Read new data only by tracking seenBytes
+        // ... (rest is same)
         const newData = xhr.responseText.substring(seenBytes);
         seenBytes = xhr.responseText.length;
         
-        // Split by newlines
         const lines = newData.split('\n');
         lines.forEach(line => {
             if (line.trim().length > 0) onData(line);
@@ -133,14 +182,27 @@ export const omphalos = async (input: string): Promise<any[]> => {
 
 export const weather = async (input: string): Promise<string> => {
     const payload = getQueryParams(input);
+    console.log('Weather Request Payload:', JSON.stringify(payload));
+    console.log('Weather Request URL:', WEATHER_URL);
+    
     try {
-        const resp = await axios.post(WEATHER_URL, payload);
+        const resp = await axios.post(WEATHER_URL, payload, {
+            headers: COMMON_HEADERS
+        });
+        console.log('Weather Response Status:', resp.status);
+        console.log('Weather Response Data:', JSON.stringify(resp.data));
+        
         const data = resp.data;
         if (data.code === 200 && data.data) {
             return getDsl('weather', data.data);
+        } else {
+            console.warn('Weather API returned error code or empty data', data);
         }
     } catch (e) {
         console.error('Weather error', e);
+        if (axios.isAxiosError(e)) {
+            console.error('Axios Error Details:', e.message, e.response?.data);
+        }
     }
     return '';
 };

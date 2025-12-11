@@ -161,7 +161,7 @@ export class WidgetMapper {
         return (
           <View
             style={{
-              backgroundColor: 'white',
+              backgroundColor: props.background_color || 'white',
               borderRadius: props.shape_border_radius || 0,
               margin: this.parsePadding(props.margin), // using parsePadding for margin list
               elevation: props.elevation,

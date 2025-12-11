@@ -11,21 +11,22 @@ export const TEMPLATES = {
   body:
     component_type: "Align"
     properties:
-      alignment: "centerLeft"
+      alignment: "center"
     children:
       - component_type: "ConstrainedBox"
         properties:
-          max_width_ratio: 0.6
+          max_width_ratio: 0.9
         children:
           - component_type: "Card"
             properties:
-              shape_border_radius: 12
-              elevation: 6
-              margin: [4, 4, 4, 4]
+              shape_border_radius: 24
+              elevation: 8
+              margin: [16, 8, 16, 8]
+              background_color: "#5C6BC0"
             children:
               - component_type: "Padding"
                 properties:
-                  padding: [16, 16, 16, 16]
+                  padding: [24, 24, 24, 24]
                 children:
                   - component_type: "Column"
                     properties:
@@ -34,64 +35,87 @@ export const TEMPLATES = {
                       - component_type: "Row"
                         properties:
                           main_axis_alignment: "spaceBetween"
+                          cross_axis_alignment: "center"
                         children:
-                          - component_type: "Text"
+                          - component_type: "Column"
                             properties:
-                              text: "{{city}}"
-                              font_size: 18
-                              font_weight: "bold"
-                          - component_type: "Text"
-                            properties:
-                              text: "{{date.hour}}:{{date.minute | padLeft(2, '0')}}"
-                              color: "#888888"
-
-                      - component_type: "SizedBox"
-                        properties:
-                          height: 10
-
-                      - component_type: "Center"
-                        children:
+                              cross_axis_alignment: "start"
+                            children:
+                              - component_type: "Text"
+                                properties:
+                                  text: "{{city}}"
+                                  font_size: 28
+                                  font_weight: "bold"
+                                  color: "#FFFFFF"
+                              - component_type: "Text"
+                                properties:
+                                  text: "{{date.year}}-{{date.month}}-{{date.day}} {{date.weekday}}"
+                                  font_size: 14
+                                  color: "#C5CAE9"
                           - component_type: "Icon"
                             properties:
                               icon_binding: "cond"
-                              size: 50
-                              color_binding: "style"
+                              size: 72
+                              color: "#FFD54F"
 
                       - component_type: "SizedBox"
                         properties:
-                          height: 8
+                          height: 24
 
-                      - component_type: "Center"
+                      - component_type: "Row"
+                        properties:
+                          main_axis_alignment: "start"
+                          cross_axis_alignment: "end"
                         children:
                           - component_type: "Text"
                             properties:
-                              text: "{{cond}}"
-                              font_size: 20
-                              color_binding: "style"
-                              font_weight: "bold"
-
-                      - component_type: "SizedBox"
-                        properties:
-                          height: 4
-
-                      - component_type: "Center"
-                        children:
-                          - component_type: "Text"
+                              text: "{{high}}°"
+                              font_size: 64
+                              font_weight: "300"
+                              color: "#FFFFFF"
+                          - component_type: "SizedBox"
                             properties:
-                              text: "{{low}}°C - {{high}}°C"
-                              font_size: 16
+                              width: 12
+                          - component_type: "Column"
+                            properties:
+                              cross_axis_alignment: "start"
+                            children:
+                              - component_type: "Text"
+                                properties:
+                                  text: "{{cond}}"
+                                  font_size: 20
+                                  font_weight: "bold"
+                                  color: "#FFFFFF"
+                              - component_type: "Text"
+                                properties:
+                                  text: "Low: {{low}}°"
+                                  font_size: 16
+                                  color: "#E8EAF6"
+                              - component_type: "SizedBox"
+                                properties:
+                                  height: 8
 
                       - component_type: "SizedBox"
                         properties:
-                          height: 4
+                          height: 16
 
-                      - component_type: "Center"
+                      - component_type: "Row"
+                        properties:
+                          main_axis_alignment: "start"
                         children:
+                          - component_type: "Icon"
+                            properties:
+                              icon: "location_on"
+                              size: 20
+                              color: "#C5CAE9"
+                          - component_type: "SizedBox"
+                            properties:
+                              width: 4
                           - component_type: "Text"
                             properties:
                               text: "{{extra}}"
                               font_size: 14
-                              color: "#666666"`,
+                              color: "#C5CAE9"`,
   music: `page:
   id: "MusicCard"
   body:

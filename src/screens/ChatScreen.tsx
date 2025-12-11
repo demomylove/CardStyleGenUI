@@ -178,8 +178,8 @@ const ChatScreen = () => {
             placeholder="请输入..."
             onSubmitEditing={handleSend}
           />
-          <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
-             <Text>➡️</Text> 
+          <TouchableOpacity onPress={handleSend} style={styles.sendButton} disabled={loading}>
+             <Text style={{ opacity: loading ? 0.3 : 1 }}>➡️</Text> 
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
