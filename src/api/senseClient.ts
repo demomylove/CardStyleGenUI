@@ -1,4 +1,4 @@
-import axios from 'axios';
+// axios is no longer needed - using streamRequest for all API calls
 
 const BASE_URL_LEGACY = 'http://10.210.0.58:21683';
 const OMPHALOS_URL = `${BASE_URL_LEGACY}/intention_v2/omphalos`; // Omphalos seems common or legacy-only? keeping as is for now
@@ -67,6 +67,62 @@ const COMMON_HEADERS = {
     'apikey': 'iirzcvKiVDXCwdJzBf9ksw==' 
 };
 
+// Helper to parse weather information from natural language text
+const parseWeatherText = (text: string): any => {
+  console.log('Parsing weather text:', text);
+  
+  // Extract city name (common Chinese cities)
+  const cityMatch = text.match(/(北京|上海|广州|深圳|杭州|南京|成都|重庆|武汉|西安|天津|苏州|郑州|长沙|沈阳|青岛|宁波|厦门|济南|哈尔滨|福州|大连|昆明|无锡|合肥|佛山|东莞|南宁|长春|石家庄|太原|南昌|贵阳|兰州|海口|银川|西宁|拉萨|乌鲁木齐)/)
+  const city = cityMatch ? cityMatch[1] : '未知';
+  
+  // Extract date (relative or absolute)
+  const dateMatch = text.match(/(今天|明天|后天|大后天)/);
+  const dateStr = dateMatch ? dateMatch[1] : '今天';
+  const date = new Date();
+  if (dateStr === '明天') date.setDate(date.getDate() + 1);
+  else if (dateStr === '后天') date.setDate(date.getDate() + 2);
+  else if (dateStr === '大后天') date.setDate(date.getDate() + 3);
+  
+  // Extract temperature (patterns like "10度", "1-10度", "10度左右")
+  const tempRangeMatch = text.match(/(\d+)[-到](\d+)度/);
+  const tempSingleMatch = text.match(/(\d+)度/);
+  let low = '0', high = '0';
+  
+  if (tempRangeMatch) {
+    low = tempRangeMatch[1];
+    high = tempRangeMatch[2];
+  } else if (tempSingleMatch) {
+    high = tempSingleMatch[1];
+    low = (parseInt(high, 10) - 5).toString(); // Estimate low temp
+  }
+  
+  // Extract weather condition
+  const condMatch = text.match(/(晴|多云|阴|小雨|中雨|大雨|暴雨|雷阵雨|阵雨|雨夹雪|小雪|中雪|大雪|暴雪|雾|霾|沙尘暴)/);
+  const cond = condMatch ? condMatch[1] : '晴';
+  
+  // Extract additional info (humidity, wind, etc.)
+  const humidityMatch = text.match(/湿度(\d+)%/);
+  const windMatch = text.match(/风速(\d+)/);
+  const humidity = humidityMatch ? humidityMatch[1] : '50';
+  const wind = windMatch ? windMatch[1] : '3';
+  
+  console.log('Parsed weather:', { city, date: date.toISOString(), low, high, cond, humidity, wind });
+  
+  return {
+    cityName: city,
+    weather_range: [{
+      predictDate: Math.floor(date.getTime() / 1000),
+      tempLow: low,
+      tempHigh: high,
+      weatherDay: cond,
+      weatherNight: cond,
+      humidity: humidity,
+      wspdDay: wind
+    }],
+    parsedFromText: true
+  };
+};
+
 // Helper to parse DSL from POI/Music/Weather responses
 
 export const getDsl = (domain: string, content: any): string => {
@@ -82,15 +138,8 @@ export const getDsl = (domain: string, content: any): string => {
     const humidity = wr.humidity;
     const wind = wr.wspdDay;
     
-    const style = (cond.includes('雨') || cond.includes('雪')) ? 'neon' : (high >= 30 ? 'gradient' : 'futuristic');
+    const style = (cond.includes('雨') || cond.includes('雪')) ? 'neon' : (parseInt(high, 10) >= 30 ? 'gradient' : 'futuristic');
     const extra = `湿度${humidity}%，风速${wind}m/s`;
-    
-    // We return a formatted object or string? The Flutter code returns a DSL string: 
-    // 'weather(city:$city,style:$style,temp:$low-$high,cond:$cond,extra:$extra,date:$date)'
-    // BUT my DslParser parses YAML. 
-    // The Flutter code has a DslTransformer that converts this string `weather(...)` into a Map.
-    // And then loads the template.
-    // I should replicate this "DSL String" generation so I can reuse the `DslTransformer` logic I will write (or have written).
     
     return `weather(city:${city},style:${style},temp:${low}-${high},cond:${cond},extra:${extra},date:${date.toISOString()})`;
   } else if (domain === 'media') {
@@ -128,18 +177,35 @@ const streamRequest = (
     });
     
     let seenBytes = 0;
+    let incompleteData = ''; // Buffer for incomplete JSON
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 3) { // Loading (Streaming)
-        // ... (rest is same)
         const newData = xhr.responseText.substring(seenBytes);
         seenBytes = xhr.responseText.length;
         
-        const lines = newData.split('\n');
+        // Combine with any incomplete data from previous chunk
+        const fullData = incompleteData + newData;
+        const lines = fullData.split('\n');
+        
+        // Keep the last line as it might be incomplete
+        incompleteData = lines.pop() || '';
+        
         lines.forEach(line => {
             if (line.trim().length > 0) onData(line);
         });
       } else if (xhr.readyState === 4) { // Done
+        // Process any remaining data
+        const remainingData = xhr.responseText.substring(seenBytes);
+        const fullData = incompleteData + remainingData;
+        
+        if (fullData.trim().length > 0) {
+          const lines = fullData.split('\n');
+          lines.forEach(line => {
+              if (line.trim().length > 0) onData(line);
+          });
+        }
+        
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve();
         } else {
@@ -185,45 +251,79 @@ export const weather = async (input: string): Promise<string> => {
     console.log('Weather Request Payload:', JSON.stringify(payload));
     console.log('Weather Request URL:', WEATHER_URL);
     
+    let accumulatedText = '';
+    let dsl = '';
+    
     try {
-        const resp = await axios.post(WEATHER_URL, payload, {
-            headers: COMMON_HEADERS
+        await streamRequest(WEATHER_URL, payload, (line) => {
+            if (!line.startsWith('data:')) return;
+            const content = line.substring(5).trim();
+            if (content === '[DONE]') return;
+            
+            try {
+                const json = JSON.parse(content);
+                if (json.code === 200 && json.data && json.data.type === 'message') {
+                    // Accumulate text fragments
+                    accumulatedText += json.data.content || '';
+                }
+            } catch (e) {
+                console.warn('Weather stream parse error', e);
+            }
         });
-        console.log('Weather Response Status:', resp.status);
-        console.log('Weather Response Data:', JSON.stringify(resp.data));
         
-        const data = resp.data;
-        if (data.code === 200 && data.data) {
-            return getDsl('weather', data.data);
-        } else {
-            console.warn('Weather API returned error code or empty data', data);
+        console.log('Accumulated weather text:', accumulatedText);
+        
+        if (accumulatedText) {
+            // Parse the accumulated text to extract weather information
+            const parsedData = parseWeatherText(accumulatedText);
+            dsl = getDsl('weather', parsedData);
+            console.log('Generated DSL from parsed text:', dsl);
         }
     } catch (e) {
         console.error('Weather error', e);
-        if (axios.isAxiosError(e)) {
-            console.error('Axios Error Details:', e.message, e.response?.data);
-        }
     }
-    return '';
+    
+    return dsl;
 };
 
 export const music = async (input: string): Promise<string> => {
     const payload = getQueryParams(input);
+    console.log('Music Request Payload:', JSON.stringify(payload));
+    console.log('Music Request URL:', MUSIC_URL);
+    
     let dsl = '';
+    let responseCount = 0;
+    
     try {
         await streamRequest(MUSIC_URL, payload, (line) => {
            if (!line.startsWith('data:')) return;
            const content = line.substring(5).trim();
            if (content === '[DONE]') return;
            
+           responseCount++;
+           
            try {
                const json = JSON.parse(content);
+               console.log(`Music Response #${responseCount}:`, JSON.stringify(json).substring(0, 200));
+               
                const data = json.data;
-               if (data && data.type !== 'message' && Array.isArray(data.content) && data.content.length > 0) {
-                   dsl = getDsl('media', data);
+               if (data) {
+                   console.log('Music data type:', data.type);
+                   
+                   // Check if it's a message type (like weather)
+                   if (data.type === 'message') {
+                       console.log('Music returned message type - may need text parsing');
+                   } else if (data.type !== 'message' && Array.isArray(data.content) && data.content.length > 0) {
+                       dsl = getDsl('media', data);
+                       console.log('Generated Music DSL:', dsl);
+                   }
                }
-           } catch (e) {}
+           } catch (e) {
+               console.warn('Music stream parse error', e);
+           }
         });
+        
+        console.log('Music final DSL:', dsl);
     } catch (e) {
         console.error('Music error', e);
     }
@@ -232,20 +332,84 @@ export const music = async (input: string): Promise<string> => {
 
 export const poi = async (input: string): Promise<string> => {
     const payload = getQueryParams(input);
+    console.log('POI Request Payload:', JSON.stringify(payload));
+    console.log('POI Request URL:', POI_URL);
+    
     let dsl = '';
+    let responseCount = 0;
+    let jsonBuffer = ''; // Buffer for accumulating multi-line JSON
+    
     try {
         await streamRequest(POI_URL, payload, (line) => {
-           if (!line.startsWith('data:')) return;
-           const content = line.substring(5).trim();
-           if (content === '[DONE]') return;
-           
-           try {
-               const json = JSON.parse(content);
-               if (json.data) {
-                   dsl = getDsl('poi', json.data);
+           // Check if this is a data line or continuation of previous JSON
+           if (line.startsWith('data:')) {
+               // If we have buffered JSON, try to parse it first
+               if (jsonBuffer) {
+                   try {
+                       const json = JSON.parse(jsonBuffer);
+                       responseCount++;
+                       console.log(`POI Response #${responseCount} type:`, json.type);
+                       
+                       if (json.type === 'poi' && json.data && json.data.pois) {
+                           console.log('POI structured data received, pois count:', json.data.pois.length);
+                           dsl = getDsl('poi', json.data);
+                           console.log('Generated POI DSL:', dsl.substring(0, 200) + '...');
+                       } else if (json.type === 'poi_tts') {
+                           console.log('POI TTS response (ignored):', json.data?.substring(0, 50));
+                       }
+                   } catch (e) {
+                       console.warn('POI buffered JSON parse error', e);
+                   }
+                   jsonBuffer = '';
                }
-           } catch (e) {}
+               
+               // Start new JSON from this line
+               const content = line.substring(5).trim();
+               if (content === '[DONE]') return;
+               
+               jsonBuffer = content;
+               
+               // Try to parse immediately (might be complete)
+               try {
+                   const json = JSON.parse(jsonBuffer);
+                   responseCount++;
+                   console.log(`POI Response #${responseCount} type:`, json.type);
+                   
+                   if (json.type === 'poi' && json.data && json.data.pois) {
+                       console.log('POI structured data received, pois count:', json.data.pois.length);
+                       dsl = getDsl('poi', json.data);
+                       console.log('Generated POI DSL:', dsl.substring(0, 200) + '...');
+                   } else if (json.type === 'poi_tts') {
+                       console.log('POI TTS response (ignored):', json.data?.substring(0, 50));
+                   }
+                   jsonBuffer = ''; // Clear buffer if successfully parsed
+               } catch (e) {
+                   // JSON incomplete, keep in buffer
+               }
+           } else if (jsonBuffer) {
+               // This is a continuation line, append to buffer
+               jsonBuffer += line;
+           }
         });
+        
+        // Process any remaining buffered JSON
+        if (jsonBuffer) {
+            try {
+                const json = JSON.parse(jsonBuffer);
+                responseCount++;
+                console.log(`POI Response #${responseCount} type (final):`, json.type);
+                
+                if (json.type === 'poi' && json.data && json.data.pois) {
+                    console.log('POI structured data received (final), pois count:', json.data.pois.length);
+                    dsl = getDsl('poi', json.data);
+                    console.log('Generated POI DSL (final):', dsl.substring(0, 200) + '...');
+                }
+            } catch (e) {
+                console.warn('POI final buffer parse error', e);
+            }
+        }
+        
+        console.log('POI final DSL:', dsl);
     } catch (e) {
         console.error('Poi error', e);
     }
