@@ -28,13 +28,27 @@ export class LLMService {
     }
   
     private static async mockGenerate(prompt: string): Promise<string> {
-      // ... (mock implementation unchanged)
       // Simulate network delay
       await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
   
       console.log('[LLM Mock] Received Prompt length:', prompt.length);
+
+      // POI Mock Fallback
+      if (prompt.toLowerCase().includes('coffee') || prompt.toLowerCase().includes('poi') || prompt.includes('咖啡') || prompt.includes('附近')) {
+          // Return a Component that uses the PoiList template. 
+          // The dataContext (pois) is already injected by chat.ts, so the renderer will access it.
+          const mockResponse = {
+              component_type: "Component",
+              properties: {
+                  template_id: "PoiList",
+                  // Bind the entire data context so {{pois}} in template resolves to data.pois
+                  data_binding: "{{}}" 
+              }
+          };
+          return JSON.stringify(mockResponse);
+      }
   
-      // UPDATED MOCK with correct schema (snake_case, component_type, properties)
+      // Default Music Mock
       const mockResponse = {
         component_type: "Center",
         properties: {},

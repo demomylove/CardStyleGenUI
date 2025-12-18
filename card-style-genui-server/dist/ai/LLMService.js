@@ -22,11 +22,24 @@ class LLMService {
         }
     }
     static async mockGenerate(prompt) {
-        // ... (mock implementation unchanged)
         // Simulate network delay
         await new Promise(resolve => setTimeout(() => resolve(), 1000));
         console.log('[LLM Mock] Received Prompt length:', prompt.length);
-        // UPDATED MOCK with correct schema (snake_case, component_type, properties)
+        // POI Mock Fallback
+        if (prompt.toLowerCase().includes('coffee') || prompt.toLowerCase().includes('poi') || prompt.includes('咖啡') || prompt.includes('附近')) {
+            // Return a Component that uses the PoiList template. 
+            // The dataContext (pois) is already injected by chat.ts, so the renderer will access it.
+            const mockResponse = {
+                component_type: "Component",
+                properties: {
+                    template_id: "PoiList",
+                    // Bind the entire data context so {{pois}} in template resolves to data.pois
+                    data_binding: "{{}}"
+                }
+            };
+            return JSON.stringify(mockResponse);
+        }
+        // Default Music Mock
         const mockResponse = {
             component_type: "Center",
             properties: {},
@@ -95,9 +108,9 @@ class LLMService {
                     'Authorization': `Bearer ${this.API_KEY}`
                 },
                 body: JSON.stringify({
-                    model: "deepseek-chat",
+                    model: "qwen-plus",
                     messages: [
-                        { role: "system", content: "You are a helpful assistant." },
+                        { role: "system", content: "You are a helpful assistant. Please respond with valid JSON." },
                         { role: "user", content: prompt }
                     ],
                     response_format: { type: "json_object" }
@@ -106,6 +119,8 @@ class LLMService {
             });
             clearTimeout(timeout);
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`LLM API Error Body: ${errorText}`);
                 throw new Error(`LLM API Error: ${response.statusText}`);
             }
             const data = await response.json();
@@ -122,6 +137,6 @@ class LLMService {
 exports.LLMService = LLMService;
 // Toggle mock via env; default to REAL API (false) per deployment requirement
 LLMService.USE_MOCK = process.env.LLM_USE_MOCK === 'true';
-// DeepSeek API Endpoint (configurable via env)
-LLMService.API_ENDPOINT = process.env.DEEPSEEK_API_ENDPOINT || 'https://api.deepseek.com/chat/completions';
-LLMService.API_KEY = process.env.DEEPSEEK_API_KEY || 'YOUR_DEEPSEEK_API_KEY';
+// Qwen API Endpoint (configurable via env)
+LLMService.API_ENDPOINT = process.env.QWEN_API_ENDPOINT || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+LLMService.API_KEY = process.env.QWEN_API_KEY || 'sk-7fa0884c562d4009b1a23bb5d52e965a';

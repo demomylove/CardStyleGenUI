@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { compare } from 'fast-json-patch';
 import { PromptBuilder } from '../ai/PromptBuilder';
 import { LLMService } from '../ai/LLMService';
+import { AmapService } from '../services/AmapService';
 
 // In-memory session store (MVP)
 // In a real app, use Redis or a database.
@@ -55,16 +56,67 @@ export const chatHandler = async (req: Request, res: Response) => {
          sendEvent('THREAD_START', { threadId: sessionId });
     }
     const messageId = uuidv4();
-    sendEvent('MESSAGE_START', { messageId, role: 'assistant' });
     sendEvent('TEXT_MESSAGE_CONTENT', { delta: "Thinking..." });
+
+    // 2.5 RAG / Context Enrichment (Video Demo Optimization)
+    // If user asks about 'coffee', 'nearby', etc., fetch POI data
+    const lowerMsg = lastUserMessage.toLowerCase();
+    let additionalInstruction = "";
+    let forceImmediatePoiRender = false;
+    
+    if (lowerMsg.includes('咖啡') || lowerMsg.includes('coffee') || lowerMsg.includes('cafe') || lowerMsg.includes('附近')) {
+        console.log("Detected POI intent, fetching data...");
+        sendEvent('TEXT_MESSAGE_CONTENT', { delta: "\n(Searching nearby POIs...)" });
+        
+        try {
+            let keyword = '咖啡';
+            if (lowerMsg.includes('咖啡')) keyword = '咖啡';
+
+            const pois = await AmapService.searchPoi(keyword);
+            if (pois.length > 0) {
+                 if (!serverState.dataContext) serverState.dataContext = {};
+                 serverState.dataContext.pois = pois;
+                 console.log(`Injecting ${pois.length} POIs into context.`);
+                 
+                 // FORCE INSTRUCTION: Do not ask for confirmation
+                 additionalInstruction = "\nIMPORTANT: POI data is provided in the Data Context. You MUST render the 'PoiList' component immediately. Do NOT ask 'Do you want to search?'. Do NOT return request_human_input. Just render the card.";
+                 // Deterministic fallback: if LLM ignores instruction, we still render directly
+                 forceImmediatePoiRender = true;
+            }
+        } catch (err) {
+            console.error("POI Search failed", err);
+        }
+    }
 
     // 3. Construct Prompt
     const dataContext = serverState.dataContext || {}; 
     const currentDsl = serverState.dsl || null;
-    const prompt = PromptBuilder.constructPrompt(lastUserMessage, dataContext, currentDsl);
+    let prompt = PromptBuilder.constructPrompt(lastUserMessage, dataContext, currentDsl);
+    
+    // Append force instruction if any
+    if (additionalInstruction) {
+        prompt += additionalInstruction;
+    }
 
-    // 4. Call LLM
-    const dslString = await LLMService.generateUI(prompt);
+    // Helper: construct POI list DSL directly (no LLM)
+    const buildPoiDsl = () => ({
+      component_type: "Component",
+      properties: {
+        template_id: "PoiList",
+        // Bind server dataContext so template can access {{pois}}
+        data_binding: "{{}}"
+      }
+    });
+
+    // 4. Decide generation path
+    let dslString: string | null = null;
+    if (forceImmediatePoiRender && (serverState.dataContext?.pois?.length ?? 0) > 0) {
+      // Deterministic: bypass LLM and render PoiList
+      const obj = buildPoiDsl();
+      dslString = JSON.stringify(obj);
+    } else {
+      dslString = await LLMService.generateUI(prompt);
+    }
     
     // 5. Parse DSL
     let dslObject;
@@ -87,15 +139,21 @@ export const chatHandler = async (req: Request, res: Response) => {
 
         // Check if it's a Human Input Request
         if (dslObject.request_human_input) {
-             console.log("Detected HITL Request:", dslObject.request_human_input);
-             sendEvent('REQUEST_HUMAN_INPUT', {
-                 prompt: dslObject.request_human_input.prompt,
-                 options: dslObject.request_human_input.options
-             });
-             sendEvent('MESSAGE_END', { messageId: uuidv4() });
-             res.write('data: [DONE]\n\n');
-             res.end();
-             return;
+             // If we already have POIs, override to direct rendering instead of asking user
+             if ((serverState.dataContext?.pois?.length ?? 0) > 0) {
+               console.log("HITL detected but POIs present -> overriding to immediate PoiList render");
+               dslObject = buildPoiDsl();
+             } else {
+               console.log("Detected HITL Request:", dslObject.request_human_input);
+               sendEvent('REQUEST_HUMAN_INPUT', {
+                   prompt: dslObject.request_human_input.prompt,
+                   options: dslObject.request_human_input.options
+               });
+               sendEvent('MESSAGE_END', { messageId: uuidv4() });
+               res.write('data: [DONE]\n\n');
+               res.end();
+               return;
+             }
         }
 
     } catch (error: any) {
@@ -109,33 +167,39 @@ export const chatHandler = async (req: Request, res: Response) => {
     // 6. Stream Completion Text
     sendEvent('TEXT_MESSAGE_CONTENT', { delta: "\nGenerated UI." });
 
-    // 7. Calculate Diff & Send STATE_DELTA
-    const oldDsl = serverState.dsl || {};
-    const patch = compare(oldDsl, dslObject);
-
-    if (patch.length > 0) {
-        // Send patch only if there are changes
-        // Use path /dsl for the patch
-        // fast-json-patch paths are relative to the object compared.
-        // We compared oldDsl vs newDsl. So path "/" in patch refers to root of Dsl.
-        // But our global state has "dsl" property. 
-        // We should prefix paths with "/dsl"?
-        // Or we can just say the STATE_DELTA updates the "dsl" property specifically.
-        // Standard AG-UI: STATE_DELTA patch applies to the ROOT agent state.
-        // So if our AgentState is { dsl: ... }, we should compare { dsl: oldDsl } vs { dsl: newDsl }.
-        
-        const oldRoot = { dsl: oldDsl };
-        const newRoot = { dsl: dslObject };
-        const rootPatch = compare(oldRoot, newRoot);
-        
-        sendEvent('STATE_DELTA', { patch: rootPatch });
+    // 7. First, ensure client has up-to-date dataContext (so templates like PoiList have data)
+    if (serverState.dataContext) {
+      try {
+        sendEvent('STATE_DELTA', { patch: [
+          { op: 'add', path: '/dataContext', value: serverState.dataContext }
+        ]});
+      } catch (e) {
+        console.warn('Failed to send dataContext patch:', e);
+      }
     }
 
-    // 8. Update Server State
+    // 8. Calculate Diff & Send STATE_DELTA for DSL
+    const hadOld = Object.prototype.hasOwnProperty.call(serverState, 'dsl') && serverState.dsl != null;
+    let rootPatch: any[];
+    if (!hadOld) {
+      // First render: send a single op to add the entire /dsl object for better client compatibility
+      rootPatch = [{ op: 'add', path: '/dsl', value: dslObject }];
+    } else {
+      // Incremental updates afterwards
+      const oldRoot = { dsl: serverState.dsl };
+      const newRoot = { dsl: dslObject };
+      rootPatch = compare(oldRoot, newRoot);
+    }
+
+    if (rootPatch.length > 0) {
+      sendEvent('STATE_DELTA', { patch: rootPatch });
+    }
+
+    // 9. Update Server State
     serverState.dsl = dslObject;
     stateStore.set(sessionId, serverState);
 
-    // 9. Finish
+    // 10. Finish
     sendEvent('MESSAGE_END', { messageId: uuidv4() }); // Ideally use same ID as start
     res.write('data: [DONE]\n\n');
     res.end();
@@ -167,8 +231,24 @@ export const chatOnceHandler = async (req: Request, res: Response) => {
   try {
     const lastUserMessage = messages[messages.length - 1]?.content || '';
     const dataContext = serverState.dataContext || {};
+
+    // Enrich dataContext with POIs (same logic as streaming) when coffee/nearby intent is detected
+    const lowerMsg = lastUserMessage.toLowerCase();
+    if (lowerMsg.includes('咖啡') || lowerMsg.includes('coffee') || lowerMsg.includes('cafe') || lowerMsg.includes('附近')) {
+      try {
+        let keyword = '咖啡';
+        if (lowerMsg.includes('咖啡')) keyword = '咖啡';
+        const pois = await AmapService.searchPoi(keyword);
+        if (pois.length > 0) {
+          (serverState as any).dataContext = serverState.dataContext || {};
+          (serverState as any).dataContext.pois = pois;
+        }
+      } catch (e) {
+        console.warn('chatOnce POI enrichment failed:', (e as any)?.message || e);
+      }
+    }
     const currentDsl = serverState.dsl || null;
-    const prompt = PromptBuilder.constructPrompt(lastUserMessage, dataContext, currentDsl);
+    const prompt = PromptBuilder.constructPrompt(lastUserMessage, serverState.dataContext || {}, currentDsl);
     const dslString = await LLMService.generateUI(prompt);
 
     let dslObject: any;
@@ -178,15 +258,15 @@ export const chatOnceHandler = async (req: Request, res: Response) => {
       return res.status(200).json({ sessionId, patch: [], note: 'Invalid JSON from LLM; ignored' });
     }
 
-    const oldDsl = serverState.dsl || {};
-    const oldRoot = { dsl: oldDsl };
-    const newRoot = { dsl: dslObject };
-    const patch = compare(oldRoot, newRoot);
+    const hadOld = Object.prototype.hasOwnProperty.call(serverState, 'dsl') && serverState.dsl != null;
+    const patch = hadOld
+      ? compare({ dsl: serverState.dsl }, { dsl: dslObject })
+      : [{ op: 'add', path: '/dsl', value: dslObject } as any];
 
     serverState.dsl = dslObject;
     stateStore.set(sessionId, serverState);
 
-    return res.status(200).json({ sessionId, patch });
+    return res.status(200).json({ sessionId, patch, dataContext: serverState.dataContext || {} });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'Server error' });
   }
