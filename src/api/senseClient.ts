@@ -330,88 +330,90 @@ export const music = async (input: string): Promise<string> => {
     return dsl;
 };
 
-export const poi = async (input: string): Promise<string> => {
-    const payload = getQueryParams(input);
-    console.log('POI Request Payload:', JSON.stringify(payload));
-    console.log('POI Request URL:', POI_URL);
-    
-    let dsl = '';
-    let responseCount = 0;
-    let jsonBuffer = ''; // Buffer for accumulating multi-line JSON
-    
-    try {
-        await streamRequest(POI_URL, payload, (line) => {
-           // Check if this is a data line or continuation of previous JSON
-           if (line.startsWith('data:')) {
-               // If we have buffered JSON, try to parse it first
-               if (jsonBuffer) {
-                   try {
-                       const json = JSON.parse(jsonBuffer);
-                       responseCount++;
-                       console.log(`POI Response #${responseCount} type:`, json.type);
-                       
-                       if (json.type === 'poi' && json.data && json.data.pois) {
-                           console.log('POI structured data received, pois count:', json.data.pois.length);
-                           dsl = getDsl('poi', json.data);
-                           console.log('Generated POI DSL:', dsl.substring(0, 200) + '...');
-                       } else if (json.type === 'poi_tts') {
-                           console.log('POI TTS response (ignored):', json.data?.substring(0, 50));
-                       }
-                   } catch (e) {
-                       console.warn('POI buffered JSON parse error', e);
-                   }
-                   jsonBuffer = '';
-               }
-               
-               // Start new JSON from this line
-               const content = line.substring(5).trim();
-               if (content === '[DONE]') return;
-               
-               jsonBuffer = content;
-               
-               // Try to parse immediately (might be complete)
-               try {
-                   const json = JSON.parse(jsonBuffer);
-                   responseCount++;
-                   console.log(`POI Response #${responseCount} type:`, json.type);
-                   
-                   if (json.type === 'poi' && json.data && json.data.pois) {
-                       console.log('POI structured data received, pois count:', json.data.pois.length);
-                       dsl = getDsl('poi', json.data);
-                       console.log('Generated POI DSL:', dsl.substring(0, 200) + '...');
-                   } else if (json.type === 'poi_tts') {
-                       console.log('POI TTS response (ignored):', json.data?.substring(0, 50));
-                   }
-                   jsonBuffer = ''; // Clear buffer if successfully parsed
-               } catch (e) {
-                   // JSON incomplete, keep in buffer
-               }
-           } else if (jsonBuffer) {
-               // This is a continuation line, append to buffer
-               jsonBuffer += line;
-           }
-        });
-        
-        // Process any remaining buffered JSON
-        if (jsonBuffer) {
-            try {
-                const json = JSON.parse(jsonBuffer);
-                responseCount++;
-                console.log(`POI Response #${responseCount} type (final):`, json.type);
-                
-                if (json.type === 'poi' && json.data && json.data.pois) {
-                    console.log('POI structured data received (final), pois count:', json.data.pois.length);
-                    dsl = getDsl('poi', json.data);
-                    console.log('Generated POI DSL (final):', dsl.substring(0, 200) + '...');
-                }
-            } catch (e) {
-                console.warn('POI final buffer parse error', e);
-            }
-        }
-        
-        console.log('POI final DSL:', dsl);
-    } catch (e) {
-        console.error('Poi error', e);
-    }
-    return dsl;
+
+// Native AG-UI Server (Android emulator loopback handling)
+// - Android Studio AVD: 10.0.2.2 -> host loopback
+// - Genymotion: 10.0.3.2 -> host loopback
+// - iOS Simulator: localhost
+import { Platform } from 'react-native';
+
+const getLocalServerCandidates = (): string[] => {
+  if (Platform.OS === 'android') {
+    // Try AVD first, then Genymotion, finally localhost (for some custom emulators)
+    // Add 3001 as potential server port
+    return ['http://10.0.2.2:3000', 'http://10.0.2.2:3001', 'http://10.0.3.2:3000', 'http://10.0.3.2:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'];
+  }
+  // iOS simulator and others can reach host via localhost
+  return ['http://127.0.0.1:3000', 'http://127.0.0.1:3001'];
 };
+
+const postJsonWithFallback = async (path: string, body: any): Promise<Response> => {
+  const bases = getLocalServerCandidates();
+  let lastErr: any = null;
+  for (const base of bases) {
+    const url = `${base}${path}`;
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) return resp;
+      lastErr = new Error(`HTTP ${resp.status} at ${url}`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('All local server candidates failed');
+};
+
+export const poi = async (input: string): Promise<string> => {
+    console.log('[senseClient] Calling Native Server for POI (once, to legacy DSL):', input);
+    const payload = { messages: [{ role: 'user', content: input }] };
+
+    const sanitize = (text: any) => {
+      if (text === undefined || text === null) return '';
+      return String(text)
+        .replace(/\(/g, '（')
+        .replace(/\)/g, '）')
+        .replace(/,/g, '，')
+        .replace(/:/g, '：')
+        .replace(/"/g, '')
+        .replace(/\n/g, ' ');
+    };
+
+    try {
+      const resp = await postJsonWithFallback('/api/chat/once', payload);
+      if (!resp.ok) throw new Error(`Native server error: ${resp.status}`);
+      const json = await resp.json();
+
+      // Prefer server-provided dataContext.pois to build legacy string DSL
+      if (json.dataContext && Array.isArray(json.dataContext.pois) && json.dataContext.pois.length > 0) {
+        const list = json.dataContext.pois as any[];
+        const itemStr = list.map(poi => {
+          const name = sanitize(poi.name);
+          const type = sanitize(poi.type);
+          const address = sanitize(poi.address);
+          const rating = sanitize(poi.rating);
+          const cost = sanitize(poi.cost);
+          const opentimeToday = sanitize(poi.opentimeToday || poi.openTimeToday);
+          const image = sanitize(poi.image || (poi.photos && poi.photos[0] && poi.photos[0].url) || '');
+          // IMPORTANT: keys must match templates.ts -> poi_item: name, type, rating, cost, opentimeToday, address, image
+          return `poi_info(name:${name},type:${type},address:${address},rating:${rating},cost:${cost},opentimeToday:${opentimeToday},image:${image})`;
+        }).join(', ');
+        const legacy = `poi(content:[${itemStr}], type:poi)`;
+        return legacy;
+      }
+
+      // Fallback: try to read patch[0].value
+      if (json.patch && Array.isArray(json.patch) && json.patch.length > 0 && json.patch[0].value) {
+        return JSON.stringify(json.patch[0].value);
+      }
+
+      return '';
+    } catch (e) {
+      console.error('[senseClient] Native POI request failed', e);
+      return '';
+    }
+};
+

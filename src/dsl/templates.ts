@@ -192,7 +192,7 @@ export const TEMPLATES = {
     children:
       - component_type: "Image"
         properties:
-          conditional_source: "{{image}}"
+          source: "{{image}}"
           width: 100
           height: 100
           border_radius: 8
@@ -238,12 +238,12 @@ export const TEMPLATES = {
     children:
       - component_type: "Loop"
         properties:
-          items: "{{pois}}"
+          items: "pois"
           item_alias: "poi"
           separator: 8
         children:
           - component_type: "Component"
             properties:
               template_id: "PoiCardItem"
-              data_binding: "{{poi}}"`
+              data_binding: "poi"`,
 };

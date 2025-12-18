@@ -74,8 +74,14 @@ const ChatScreen = () => {
 
     try {
       // 1. Get Intentions
-      // Wait 2 seconds simulation? No, real call.
-      const intentions = await omphalos(text);
+      // Hack: Bypass omphalos for coffee/poi demo to avoid external service latency/failure
+      let intentions: any[] = [];
+      if (text.includes('咖啡') || text.includes('附近') || text.toLowerCase().includes('coffee') || text.toLowerCase().includes('nearby')) {
+          console.log('Skipping Omphalos for local POI demo');
+          intentions = [{ can_execute: true, domain: 'poi' }];
+      } else {
+          intentions = await omphalos(text);
+      }
       
       updateTaskStatus(taskMsgId, 'thinkingComplete');
       
@@ -106,7 +112,10 @@ const ChatScreen = () => {
       console.log('DSL:', dslString);
 
       if (dslString) {
-        const widget = await DslFactory.parseDsl(dslString);
+        // Auto-detect JSON component vs legacy string DSL
+        const widget = await (DslFactory as any).parseAny
+          ? (DslFactory as any).parseAny(dslString)
+          : DslFactory.parseDsl(dslString);
         updateTaskStatus(taskMsgId, 'completed', widget);
       } else {
         updateTaskStatus(taskMsgId, 'completed', (
@@ -144,12 +153,16 @@ const ChatScreen = () => {
         </View>
       );
     } else {
-      return (
-        <TaskCard
-          status={item.task!.status}
-          content={item.task!.content}
-        />
-      );
+      const content = item.task!.content;
+      // Fail-safe: if content is empty but我们已经完成，则给一个提示避免空白
+      if (item.task!.status === 'completed' && !content) {
+        return (
+          <View style={{ padding: 12 }}>
+            <Text style={{ color: 'orange', textAlign: 'center' }}>未收到可渲染的内容，请重试或检查服务端 DSL。</Text>
+          </View>
+        );
+      }
+      return <TaskCard status={item.task!.status} content={content} />;
     }
   };
 

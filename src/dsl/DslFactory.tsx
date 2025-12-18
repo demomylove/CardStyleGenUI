@@ -10,7 +10,47 @@ import { LLMService } from '../ai/LLMService';
  * 处理不同领域（天气、音乐、POI）的高级解析逻辑。
  */
 export const DslFactory = {
+  // New: auto-detect structured JSON DSL vs legacy string DSL
+  parseAny: async (input: string): Promise<React.ReactNode> => {
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const obj = JSON.parse(trimmed);
+          // Case A: wrapper { component, data }
+          if (obj && obj.component && obj.data) {
+            return renderComponent(obj.component, obj.data);
+          }
+          // Case B: direct component JSON
+          if (obj && obj.component_type) {
+            return renderComponent(obj, {});
+          }
+          // Unknown JSON → fallback to legacy parsing below
+        } catch (_e) {
+          // Not JSON, fall through to legacy parsing
+        }
+      }
+    }
+    // Legacy string DSL path
+    return DslFactory.parseDsl(input);
+  },
   parseDsl: async (dsl: string): Promise<React.ReactNode> => {
+    // 1. Try JSON parsing first (New Standard)
+    const trimmed = dsl.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+            const json = JSON.parse(trimmed);
+            console.log('[DslFactory] Parsed JSON DSL:', json);
+            // If it's a Component/Page structure, render it directly.
+            // We pass an empty initial data context because the JSON DSL 
+            // usually contains its own data via data_binding or properties.
+            return renderComponent(json, {});
+        } catch (e) {
+            console.warn('[DslFactory] JSON parse failed, falling back to legacy parser', e);
+        }
+    }
+
+    // 2. Fallback to Legacy String Parsing (Old Standard)
     const parsed = parseInput(dsl);
     const type = parsed.type;
     const data = parsed.data;
@@ -110,15 +150,19 @@ const parseInput = (input: string): { type: string; data: any } => {
           const contentStr = poiMatch[1];
           // const poiType = poiMatch[2].trim(); // unused in rendering for now
           
+          console.log('[DslFactory] Parsed POI content string length:', contentStr.length);
+
           // Extract individual poi_info(...) items
           const poiList: any[] = [];
           const itemRegex = /poi_info\((.*?)\)/g;
           let m;
           while ((m = itemRegex.exec(contentStr)) !== null) {
               const itemBody = m[1]; 
+              console.log('[DslFactory] Found POI item body:', itemBody);
               const itemMap = parseDslMap(itemBody); 
               poiList.push(itemMap);
           }
+          console.log('[DslFactory] Total parsed items:', poiList.length);
           data = poiList;
       }
   }

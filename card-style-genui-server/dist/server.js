@@ -14,6 +14,23 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // bind on all interfaces for external access
 app.use((0, cors_1.default)());
 app.use(body_parser_1.default.json());
+// 允许 x-www-form-urlencoded 形式（payload=JSON）
+app.use(body_parser_1.default.urlencoded({ extended: false }));
+// 在进入业务路由前，兼容从 urlencoded 中提取 payload 作为 body
+app.use((req, _res, next) => {
+    var _a;
+    try {
+        // 如果没有标准 JSON body，但存在 urlencoded 的 payload，则解析之
+        if ((!req.body || Object.keys(req.body).length === 0) && ((_a = req.body) === null || _a === void 0 ? void 0 : _a.payload)) {
+            const raw = req.body.payload;
+            req.body = JSON.parse(raw);
+        }
+    }
+    catch (e) {
+        // 留空：交给下游处理
+    }
+    next();
+});
 // Basic access log for troubleshooting connectivity on server side
 app.use((req, _res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -21,6 +38,8 @@ app.use((req, _res, next) => {
 });
 // AG-UI Protocol Endpoint
 app.post('/api/chat', chat_1.chatHandler);
+// Non-streaming fallback endpoint
+app.post('/api/chat/once', chat_1.chatOnceHandler);
 // 兼容某些网关/代理对 POST 带 chunked 的限制：
 // 提供 GET /api/chat?payload=<urlencoded base64/json> 的兜底入口。
 // 客户端将完整 JSON 载荷放到 payload 参数里（URL 编码的 JSON 字符串）。

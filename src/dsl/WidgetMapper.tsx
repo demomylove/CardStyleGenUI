@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Image, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 
 // Simple Emoji mapping for icons to avoid native dependency issues with vector-icons
@@ -80,6 +80,33 @@ export class WidgetMapper {
 
       case 'Text':
         const color = props.color || (props.color_binding ? this.parseBoundColor(props.color_binding, dataContext) : '#000000');
+        const textContent = props.text_binding ? this.resolveBinding(props.text_binding, dataContext) : props.text;
+        
+        if (props.icon) {
+            return (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ 
+                        fontSize: props.font_size || 14, 
+                        color: color, 
+                        marginRight: 4 
+                    }}>
+                        {ICON_MAP[props.icon] || ICON_MAP.help_outline}
+                    </Text>
+                    <Text
+                        numberOfLines={props.max_lines}
+                        style={{
+                            fontSize: props.font_size || 14,
+                            fontWeight: this.fontWeight(props.font_weight),
+                            color: color,
+                            flex: 1, // Allow text to take remaining space
+                        }}
+                    >
+                        {textContent}
+                    </Text>
+                </View>
+            );
+        }
+
         return (
           <Text
             numberOfLines={props.max_lines}
@@ -89,7 +116,7 @@ export class WidgetMapper {
               color: color,
             }}
           >
-            {props.text_binding ? this.resolveBinding(props.text_binding, dataContext) : props.text}
+            {textContent}
           </Text>
         );
 

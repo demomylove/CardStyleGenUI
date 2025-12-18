@@ -93,6 +93,18 @@ npm run android
 1.  编译 Android 原生代码 (Gradle Build)。
 2.  启动 App 并连接到 Metro Bundler。
 
+> 如果你使用 Genymotion 或第三方模拟器，可能无法通过 10.0.2.2 访问宿主机。
+> 本项目已在 `src/api/senseClient.ts` 中内置候选地址自动回退：
+> - Android AVD: 10.0.2.2:3000
+> - Genymotion: 10.0.3.2:3000
+> - 兜底: 127.0.0.1:3000
+>
+> 确保已映射端口（USB/ADB 连接时无需外网）：
+> ```bash
+> adb reverse tcp:8081 tcp:8081   # Metro
+> adb reverse tcp:3000 tcp:3000   # 本地 Node 服务
+> ```
+
 ## 5. 常见问题排查
 
 **Q: 编译报错 `SDK location not found`?**
@@ -107,3 +119,9 @@ A: 确保模拟器已启动且连接正常。尝试运行 `cd android && ./gradl
 
 **Q: Metro 连接失败?**
 A: 在模拟器上按 `CMD + M` (Mac) 或 `CTRL + M` (Windows) 打开开发者菜单，选择 "Reload"。或者在终端按 `r` 键重载。
+
+**Q: 启动后出现 "Unable to load script" 红屏?**
+A: 说明 App 未连接到 Metro 或端口未转发。
+- 确认本机已启动 Metro：`npx react-native start --port 8081`
+- 确认设备端口转发：`adb reverse tcp:8081 tcp:8081`
+- 物理机 USB 调试时同样需要执行上述 `adb reverse`。

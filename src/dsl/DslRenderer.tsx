@@ -65,10 +65,16 @@ export const renderComponent = (component: any, data: any, onInteraction?: (acti
       
       if (templateId) {
           // Resolve data binding for the new component scope
+          // Resolve data binding for the new component scope
           let componentData = data;
           if (dataBinding) {
-             const key = dataBinding.replace(/{{|}}/g, '').trim();
-             componentData = resolvePath(key, data) || data;
+             if (typeof dataBinding === 'string') {
+                const key = dataBinding.replace(/{{|}}/g, '').trim();
+                componentData = resolvePath(key, data) || data;
+             } else if (typeof dataBinding === 'object') {
+                // Direct object injection (from JSON DSL)
+                componentData = dataBinding;
+             }
           }
           
           // Load and fill template dynamically
