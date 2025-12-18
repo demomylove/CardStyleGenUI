@@ -42,7 +42,8 @@ export class WidgetMapper {
     type: string,
     props: any,
     children: any[],
-    dataContext: any
+    dataContext: any,
+    onInteraction?: (action: any) => void
   ): React.ReactNode {
     switch (type) {
       case 'Column':
@@ -97,7 +98,11 @@ export class WidgetMapper {
 
       case 'Spacer':
       case 'SizedBox':
-        return <View style={{ height: props.height, width: props.width }} />;
+        return (
+          <View style={{ height: props.height, width: props.width }}>
+            {children}
+          </View>
+        );
 
       case 'Align':
       case 'Center':
@@ -139,23 +144,24 @@ export class WidgetMapper {
             </Text>
         );
 
-      case 'IconButton':
-        // Similar to Icon but clickable
-         const btnIconName = props.icon || (props.icon_binding ? this.resolveBinding(props.icon_binding, dataContext) : 'help_outline'); 
-         // logic in template: icon_binding: "playerState.playing ? 'pause_circle_filled' : 'play_circle_fill'"
-         // This is an expression. Simple binding resolution might fail.
-         // For now, we'll use a simple eval or basic check if the value matches known states.
-         // In the Flutter code, `_parseBoundIcon` was custom logic.
-         // We might need to eval the binding if it looks like JS.
-         // But for safety, let's try to run it as simple JS if it contains ternary?
-         // props.on_click is also an action.
+      case 'IconButton': {
+         const btnIconName = props.icon || (props.icon_binding ? this.resolveBinding(props.icon_binding, dataContext) : 'help_outline');
+         
+         const handlePress = () => {
+             console.log('Icon Button Pressed', props.on_click);
+             if (props.on_click && onInteraction) {
+                 onInteraction(props.on_click);
+             }
+         };
+
         return (
-             <TouchableOpacity onPress={() => console.log('Icon Button Pressed')}>
+             <TouchableOpacity onPress={handlePress}>
                 <Text style={{ fontSize: props.size || 24, color: props.color }}>
                     {this.evalIconExpression(props.icon_binding, dataContext) || ICON_MAP[btnIconName] || ICON_MAP.help_outline}
                 </Text>
              </TouchableOpacity>
         );
+      }
 
       case 'Card':
         return (
@@ -188,7 +194,15 @@ export class WidgetMapper {
         );
 
       default:
-        return <View />;
+        const defaultView = <View />;
+        if (props.on_click && onInteraction) {
+            return (
+                <TouchableOpacity onPress={() => onInteraction(props.on_click)}>
+                    {children.length > 0 ? children : defaultView}
+                </TouchableOpacity>
+            );
+        }
+        return <View>{children}</View>;
     }
   }
 

@@ -1,15 +1,15 @@
 import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import ChatScreen from './src/screens/ChatScreen';
+import MainScreen from './src/screens/MainScreen';
 
 /**
  * 应用程序根组件。
- * 设置 SafeAreaProvider 并渲染 ChatScreen。
+ * 设置 SafeAreaProvider 并渲染 GenUITestScreen。
  */
 const App = (): React.JSX.Element => {
   return (
     <SafeAreaProvider>
-      <ChatScreen />
+      <MainScreen />
     </SafeAreaProvider>
   );
 };

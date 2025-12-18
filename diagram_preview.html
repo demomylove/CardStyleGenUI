@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            flowchart: { 
+                useMaxWidth: false, 
+                htmlLabels: true
+            } 
+        });
+    </script>
+    <style>
+        body { margin: 0; padding: 20px; background: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; flex-direction: column; }
+        .mermaid { width: 100%; max-width: 1800px; display: flex; justify-content: center; }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Dynamic UI Rendering Pipeline</h1>
+    <div class="mermaid">
+    flowchart TB
+        %% 强制外层布局为 Top-Bottom，利用 Subgraph 实现折行
+        
+        %% 样式定义
+        classDef container fill:#f5f7fa,stroke:#cfd8dc,stroke-width:2px,rx:10,ry:10;
+        classDef component fill:#ffffff,stroke:#1e88e5,stroke-width:2px,rx:5,ry:5,shadow:5px;
+        classDef artifact fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,stroke-dasharray: 5 5;
+        classDef cloud fill:#e8f5e9,stroke:#43a047,stroke-width:2px,rx:5,ry:5;
+
+        %% 第一行容器
+        subgraph Row1 [ ]
+            direction LR
+            style Row1 fill:none,stroke:none
+            
+            Start((用户输入)) --> DataLayer
+            
+            %% 阶段一：横向排列（加入云端 API）
+            subgraph DataLayer [阶段 1: 数据获取与标准化]
+                direction LR
+                Client["<b>业务数据服务</b><br/><i>senseClient.ts</i>"]
+                CloudAPI["<b>云端 API</b><br/><i>Weather/Music/POI</i>"]:::cloud
+                Adapter["<b>DSL 适配器</b><br/><i>getDsl( )</i>"]
+                
+                Client -->|HTTP POST| CloudAPI
+                CloudAPI -->|JSON 响应| Adapter
+                Adapter -->|输出| DSL_String("DSL 字符串/对象"):::artifact
+            end
+
+            DataLayer --> FactoryLayer
+
+            %% 阶段二：横向排列
+            subgraph FactoryLayer [阶段 2: 动态模版组装]
+                direction LR
+                Factory["<b>DSL 工厂入口</b><br/><i>DslFactory.tsx</i>"]
+                Templates["<b>布局模版库</b><br/><i>templates.ts</i>"]
+                Engine["<b>模版填充引擎</b><br/><i>DslTemplateLoader</i>"]
+
+                Factory -.->|读取| Templates
+                Factory -->|调用| Engine
+                Engine -->|输出| YAML_Filled("完整 YAML 配置"):::artifact
+            end
+        end
+
+        %% 第二行容器
+        subgraph Row2 [ ]
+            direction LR
+            style Row2 fill:none,stroke:none
+
+            %% 阶段三：横向排列
+            subgraph RenderLayer [阶段 3: 渲染与映射]
+                direction LR
+                Parser["<b>YAML 解析器</b><br/><i>DslParser.tsx</i>"]
+                Renderer["<b>递归渲染引擎</b><br/><i>DslRenderer.tsx</i>"]
+                Mapper["<b>组件映射器</b><br/><i>WidgetMapper.tsx</i>"]
+
+                Parser -->|生成树| Renderer
+                Renderer -->|递归构建| Mapper
+            end
+            
+            RenderLayer --> End(["React Native UI"])
+        end
+
+        %% 连接折行
+        FactoryLayer --> RenderLayer
+
+        %% 样式应用
+        class DataLayer,FactoryLayer,RenderLayer container;
+        class Client,Adapter,Factory,Templates,Engine,Parser,Renderer,Mapper component;
+        
+        %% 连接线样式
+        linkStyle default stroke:#546e7a,stroke-width:2px,fill:none;
+    </div>
+</body>
+</html>

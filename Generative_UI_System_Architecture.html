@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generative UI 系统架构与实现机制</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose',
+        });
+    </script>
+    <style>
+        body {
+            font-family: "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 { border-bottom: 2px solid #eaeaea; padding-bottom: 10px; margin-bottom: 30px; }
+        h2 { margin-top: 30px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px; }
+        code { background-color: #f6f8fa; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        .mermaid { text-align: center; margin: 30px 0; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 8px; }
+        strong { color: #000; }
+        @media print {
+            body { max-width: 100%; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Generative UI 系统架构与实现机制</h1>
+
+<p>本文档详细说明了本项目中 Generative UI (GenUI) 系统的核心架构、数据链路及渲染机制。</p>
+
+<h2>1. 核心链路 (Data Flow)</h2>
+
+<p>整个系统遵循 <strong>"Prompt as Compiler"</strong> (Prompt 即编译器) 的设计理念。</p>
+
+<div class="mermaid">
+graph LR
+    User["User Query"] -->|Input| PromptBuilder["PromptBuilder"]
+    Data["Data Context"] -->|Input| PromptBuilder
+    PromptBuilder -->|"Construct Prompt"| LLM["LLM Service"]
+    LLM -->|"Generate JSON DSL"| JSON["DSL Object"]
+    JSON -->|Parse| DslRenderer["DslRenderer"]
+    DslRenderer -->|"Map to Native"| WidgetMapper["WidgetMapper"]
+    WidgetMapper -->|Render| UI["React Native UI"]
+</div>
+
+<ul>
+    <li><strong>User Query</strong>: 用户输入的自然语言指令（如："帮我生成一个周杰伦的卡片"）。</li>
+    <li><strong>Data Context</strong>: 业务数据源（JSON），包含实际要展示的数据。<strong>这不是 AI 生成的</strong>，而是由客户端调用业务 API 获取后，作为上下文提供给 AI 的。</li>
+    <li><strong>Result (DSL)</strong>: AI 生成的中间产物，是符合我们预定义的 Schema 的 JSON 数据，而非直接的代码或图片。</li>
+</ul>
+
+<h2>2. Prompt 工程设计 (Prompt Engineering)</h2>
+
+<p>Prompt 工程集中在 <code>src/ai/PromptBuilder.ts</code> 中，负责将“原材料”组装成 AI 可理解的指令。</p>
+
+<p>主要包含四个部分：</p>
+
+<ol>
+    <li><strong>Role (角色定义)</strong>: 设定 AI 为 "Expert UI Generator"。</li>
+    <li><strong>Component Library (组件库注入)</strong>: 将 <code>ComponentSchema.ts</code> 中的 TypeScript 定义注入 Prompt。
+        <ul>
+            <li><em>作用</em>：相当于给 AI 一份 API 文档，明确告诉它只能使用 <code>Column</code>, <code>Row</code>, <code>Card</code>, <code>Text</code>, <code>Image</code> 等组件，以及它们支持的属性（如蛇形命名 <code>background_color</code>）。</li>
+        </ul>
+    </li>
+    <li><strong>Context (上下文注入)</strong>: 动态填入用户的 Query 和 Data JSON。</li>
+    <li><strong>Constraints (约束条件)</strong>: 强制要求输出纯净的 JSON 格式，禁止输出 Markdown 代码块。</li>
+</ol>
+
+<h2>3. 递归渲染机制 (Recursive Rendering)</h2>
+
+<p>前端渲染引擎不依赖 <code>eval</code> 或即时编译，而是通过递归遍历 DSL 树来构建原生组件列表。</p>
+
+<p><strong>实现逻辑</strong> (<code>src/dsl/DslRenderer.tsx</code>):</p>
+
+<ol>
+    <li><strong>节点识别</strong>: <code>renderComponent</code> 函数接收一个 DSL 节点对象。</li>
+    <li><strong>属性解析</strong>: 将 DSL 中的蛇形属性（如 <code>background_color</code>）传递给 Mapper。</li>
+    <li><strong>递归遍历 (Recursion)</strong>:
+        <ul>
+            <li>检查当前节点是否有 <code>children</code> 数组。</li>
+            <li>如果有，对数组中的每个子节点<strong>递归调用</strong> <code>renderComponent</code>。</li>
+            <li>这一过程会一直进行，直到遇到叶子节点（如 <code>Text</code>, <code>Image</code>）。</li>
+        </ul>
+    </li>
+    <li><strong>组件构建</strong>: 携带递归生成的子组件树，调用 <code>WidgetMapper</code> 生成最终的 React Node。</li>
+</ol>
+
+<h2>4. 自适应与响应式 (Adaptive & Responsive)</h2>
+
+<p>生成的 UI 并非静态图片，而是完全原生的 React Native 组件，因此继承了 Native 的所有响应式特性：</p>
+
+<ul>
+    <li><strong>尺寸自适应</strong>:
+        <ul>
+            <li>基于 <strong>Flexbox</strong> 布局。</li>
+            <li><code>Column</code>/<code>Row</code> 容器默认根据内容撑开 (Main Axis) 或填充父容器 (Cross Axis)。</li>
+            <li><code>Image</code> 组件支持 <code>width: "100%"</code> (代码逻辑映射)，可随容器宽度自动缩放。</li>
+        </ul>
+    </li>
+    <li><strong>内容自适应</strong>:
+        <ul>
+            <li><code>Text</code> 组件支持自动换行和多行显示。数据变多时，卡片高度会自动增加。</li>
+        </ul>
+    </li>
+    <li><strong>布局弹性</strong>:
+        <ul>
+            <li>通过 Schema 中的 <code>main_axis_alignment</code> (如 <code>space-between</code>)，组件能自动适配不同宽度的屏幕并在其间分配间距。</li>
+        </ul>
+    </li>
+</ul>
+
+<h2>总结</h2>
+
+<p>该系统实现了一个闭环的 <strong>Server-Driven UI (SDUI)</strong> 变体：</p>
+<ul>
+    <li><strong>AI</strong> 充当了“实时设计师”和“布局引擎”。</li>
+    <li><strong>Native App</strong> 充当了“傻瓜式渲染器”，只负责忠实地将 JSON 转换为像素。</li>
+    <li><strong>数据</strong> 与 <strong>样式</strong> 是分离的，但通过 Prompt 在生成时融合在了一起。</li>
+</ul>
+
+</body>
+</html>

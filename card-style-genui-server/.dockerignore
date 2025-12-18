@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log*
+yarn.lock
+.yarn
+.pnp*
+.DS_Store
+.git
+.gitignore
+.env*
+Dockerfile*
+docker-compose*.yml
+README*
+**/*.local.*
+**/*.swp

@@ -1,0 +1,12 @@
+graph TD
+    User["用户"] -->|"用户查询"| NewAgent["新 LLM Agent"]
+    
+    subgraph "借鉴 AutoView 逻辑"
+        DSL_Schema["DSL 定义 Schema"] --> NewAgent
+        NewAgent -->|"Prompt (Schema + 查询)"| LLM["大模型"]
+        LLM -->|"生成"| JSON_DSL["JSON DSL 数据"]
+    end
+    
+    JSON_DSL -->|"解析"| DslParser["现有 DslParser"]
+    DslParser -->|"渲染"| DslRenderer["现有 DslRenderer"]
+    DslRenderer -->|"展示"| AppUI["React Native UI"]

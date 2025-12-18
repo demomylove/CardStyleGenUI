@@ -1,6 +1,9 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { DslParser, DslTemplateLoader } from './DslParser';
+import { renderComponent } from './DslRenderer';
+import { PromptBuilder } from '../ai/PromptBuilder';
+import { LLMService } from '../ai/LLMService';
 
 /**
  * 将原始 DSL 字符串转换为渲染后的 React Native 组件的工厂。
@@ -41,6 +44,39 @@ export const DslFactory = {
       // Standard case: Single card rendering
       const filledYaml = DslTemplateLoader.loadAndFillTemplate(type, data);
       return DslParser.parse(filledYaml, data);
+    }
+  },
+
+  /**
+   * Generates UI from natural language query and data using LLM.
+   * @param query User's natural language request
+   * @param data Data context for the UI
+   */
+  generateFromQuery: async (query: string, data: any): Promise<React.ReactNode> => {
+    try {
+      console.log(`[GenUI] Constructing prompt for query: "${query}"`);
+      const prompt = PromptBuilder.constructPrompt(query, data);
+      
+      console.log(`[GenUI] Calling LLMService...`);
+      const jsonStr = await LLMService.generateUI(prompt);
+      
+      console.log(`[GenUI] Received DSL:`, jsonStr);
+      let dslObject;
+      try {
+        // Simple cleanup for markdown code blocks if LLM ignores instruction
+        const cleanJson = jsonStr.replace(/```json/g, '').replace(/```/g, '');
+        dslObject = JSON.parse(cleanJson);
+      } catch (e) {
+        console.error('[GenUI] JSON Parse Error:', e);
+        return <Text style={{color: 'red'}}>AI Response Error: Invalid JSON</Text>;
+      }
+
+      // Render the generated DSL using renderComponent directly
+      // This bypasses DslParser's YAML expectation
+      return renderComponent(dslObject, data);
+    } catch (error) {
+      console.error('[GenUI] Generation Failed:', error);
+      return <Text style={{color: 'red'}}>Generative UI Failed</Text>;
     }
   },
 };

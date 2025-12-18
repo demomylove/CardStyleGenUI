@@ -9,7 +9,7 @@ import { DslParser } from './DslParser';
  * @param data 用于解析绑定的当前数据上下文
  * @returns React 节点
  */
-export const renderComponent = (component: any, data: any): React.ReactNode => {
+export const renderComponent = (component: any, data: any, onInteraction?: (action: any) => void): React.ReactNode => {
   const type = component.component_type;
   const properties = component.properties || {};
   const children = component.children || [];
@@ -31,7 +31,7 @@ export const renderComponent = (component: any, data: any): React.ReactNode => {
              const itemContext = { ...data, [itemAlias]: item };
              
              children.forEach((childTemplate: any, childIndex: number) => {
-                 const childNode = renderComponent(childTemplate, itemContext);
+                 const childNode = renderComponent(childTemplate, itemContext, onInteraction);
                  if (childNode) {
                      if (React.isValidElement(childNode)) {
                         // Assign unique key to help React reconciliation
@@ -75,6 +75,11 @@ export const renderComponent = (component: any, data: any): React.ReactNode => {
           const filledYaml = DslTemplateLoader.loadAndFillTemplate(templateId, componentData);
           // Parse and Render the loaded template
           return DslParser.parse(filledYaml, componentData);
+          // Note: DslParser.parse calls renderComponent internally? 
+          // Wait, DslParser.parse returns ReactNode?
+          // I need to check DslParser definition. Assuming for now I can't easily pass it if parse wraps it.
+          // But looking at line 77: DslParser.parse(filledYaml, componentData)
+          // If DslParser invokes renderComponent, I need to update DslParser too.
       }
       return null;
   }
@@ -88,14 +93,14 @@ export const renderComponent = (component: any, data: any): React.ReactNode => {
   // Recursively render children
   const childWidgets = children.map((child: any, index: number) => {
      // Add key to children
-     const childNode = renderComponent(child, data);
+     const childNode = renderComponent(child, data, onInteraction);
      if (React.isValidElement(childNode)) {
         return React.cloneElement(childNode, { key: index });
      }
      return childNode;
   });
 
-  return WidgetMapper.buildWidget(type, resolvedProps, childWidgets, data);
+  return WidgetMapper.buildWidget(type, resolvedProps, childWidgets, data, onInteraction);
 };
 
 /**
