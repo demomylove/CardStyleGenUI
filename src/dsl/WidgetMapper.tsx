@@ -46,37 +46,52 @@ export class WidgetMapper {
     onInteraction?: (action: any) => void
   ): React.ReactNode {
     switch (type) {
-      case 'Column':
-        return (
-          <View
-            style={{
-              flexDirection: 'column',
-              alignItems: this.crossAxisAlignment(props.cross_axis_alignment) as any,
-              justifyContent: this.mainAxisAlignment(props.main_axis_alignment) as any,
-              padding: this.parsePadding(props.padding),
-              backgroundColor: props.background_color,
-            }}
-          >
-            {children}
-          </View>
-        );
+      case 'Column': {
+        const columnStyle = {
+          flexDirection: 'column' as const,
+          alignItems: this.crossAxisAlignment(props.cross_axis_alignment) as any,
+          justifyContent: this.mainAxisAlignment(props.main_axis_alignment) as any,
+          padding: this.parsePadding(props.padding),
+          backgroundColor: props.background_color,
+        };
+        
+        if (props.on_click && onInteraction) {
+          return (
+            <TouchableOpacity onPress={() => {
+              console.log('Column Pressed', props.on_click);
+              onInteraction(props.on_click);
+            }} style={columnStyle}>
+              {children}
+            </TouchableOpacity>
+          );
+        }
+        
+        return <View style={columnStyle}>{children}</View>;
+      }
 // ... existing code ...
 
-      case 'Row':
-        return (
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: this.crossAxisAlignment(props.cross_axis_alignment) as any,
-              justifyContent: this.mainAxisAlignment(props.main_axis_alignment) as any,
-              padding: this.parsePadding(props.padding),
-              // spacing is handled by gap in newer RN or margin on children
-              gap: props.spacing, 
-            }}
-          >
-            {children}
-          </View>
-        );
+      case 'Row': {
+        const rowStyle = {
+          flexDirection: 'row' as const,
+          alignItems: this.crossAxisAlignment(props.cross_axis_alignment) as any,
+          justifyContent: this.mainAxisAlignment(props.main_axis_alignment) as any,
+          padding: this.parsePadding(props.padding),
+          gap: props.spacing,
+        };
+        
+        if (props.on_click && onInteraction) {
+          return (
+            <TouchableOpacity onPress={() => {
+              console.log('Row Pressed', props.on_click);
+              onInteraction(props.on_click);
+            }} style={rowStyle}>
+              {children}
+            </TouchableOpacity>
+          );
+        }
+        
+        return <View style={rowStyle}>{children}</View>;
+      }
 
       case 'Text':
         const color = props.color || (props.color_binding ? this.parseBoundColor(props.color_binding, dataContext) : '#000000');
@@ -190,23 +205,72 @@ export class WidgetMapper {
         );
       }
 
-      case 'Card':
+      case 'Card': {
+        const cardStyle = {
+          backgroundColor: props.background_color || 'white',
+          borderRadius: props.shape_border_radius || 0,
+          margin: this.parsePadding(props.margin),
+          padding: this.parsePadding(props.padding),
+          elevation: props.elevation,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 2,
+        };
+        
+        // 如果 Card 有 on_click 属性，将其包装在 TouchableOpacity 中
+        if (props.on_click && onInteraction) {
+          return (
+            <TouchableOpacity 
+              onPress={() => {
+                console.log('Card Pressed', props.on_click);
+                onInteraction(props.on_click);
+              }}
+              style={cardStyle}
+            >
+              {children}
+            </TouchableOpacity>
+          );
+        }
+        
         return (
-          <View
-            style={{
-              backgroundColor: props.background_color || 'white',
-              borderRadius: props.shape_border_radius || 0,
-              margin: this.parsePadding(props.margin), // using parsePadding for margin list
-              elevation: props.elevation,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 2,
-            }}
-          >
+          <View style={cardStyle}>
             {children}
           </View>
         );
+      }
+
+      case 'Button': {
+        const handleButtonPress = () => {
+          console.log('Button Pressed', props.on_click);
+          if (props.on_click && onInteraction) {
+            onInteraction(props.on_click);
+          }
+        };
+        return (
+          <TouchableOpacity
+            onPress={handleButtonPress}
+            style={{
+              backgroundColor: props.background_color || '#007AFF',
+              padding: props.padding || 12,
+              paddingHorizontal: (props.padding || 12) * 1.5,
+              borderRadius: props.border_radius || 8,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text
+              style={{
+                color: props.text_color || '#FFFFFF',
+                fontSize: props.font_size || 16,
+                fontWeight: 'bold',
+              }}
+            >
+              {props.text || 'Button'}
+            </Text>
+          </TouchableOpacity>
+        );
+      }
         
       case 'Slider':
         return (

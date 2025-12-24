@@ -66,4 +66,42 @@ AVAILABLE COMPONENTS & PROPERTIES:
 6. SizedBox
    - properties: { width: number, height: number }
    - children: []
+
+7. Button
+   - properties: { 
+       text: string (REQUIRED),
+       background_color: string (hex, default: '#007AFF'),
+       text_color: string (hex, default: '#FFFFFF'),
+       font_size: number (default: 16),
+       padding: number (default: 12),
+       border_radius: number (default: 8),
+       on_click: ActionObject (event handler)
+     }
+   - children: []
+
+# Event Actions (ActionObject)
+When a component needs to trigger an action on click, use on_click property:
+{
+  "on_click": {
+    "action_type": "toast" | "navigate" | "call_api",
+    "payload": {
+      "message": string,     // for toast
+      "route": string,       // for navigate
+      "api_endpoint": string // for call_api
+    }
+  }
+}
+
+Example Button with Toast:
+{
+  "component_type": "Button",
+  "properties": {
+    "text": "点击我",
+    "background_color": "#FF6B35",
+    "on_click": {
+      "action_type": "toast",
+      "payload": { "message": "按钮被点击了！" }
+    }
+  }
+}
 `;

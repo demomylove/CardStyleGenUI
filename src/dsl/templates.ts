@@ -6,7 +6,7 @@
 export const TEMPLATES = {
   // Weather Card Template
   // Displays city, date, temperature range, condition icon, and extra info.
-  weather: `page:
+  WeatherCard: `page:
   id: "WeatherCard"
   body:
     component_type: "Align"
@@ -116,7 +116,7 @@ export const TEMPLATES = {
                               text: "{{extra}}"
                               font_size: 14
                               color: "#C5CAE9"`,
-  music: `page:
+  MusicCard: `page:
   id: "MusicCard"
   body:
     component_type: "Column"
@@ -182,7 +182,7 @@ export const TEMPLATES = {
               icon: "play_circle_fill"
               size: 48
               color: "#2196F3"`,
-  poi_item: `page:
+  PoiCardItem: `page:
   id: "PoiCardItem"
   body:
     component_type: "Row"
@@ -228,7 +228,7 @@ export const TEMPLATES = {
             properties:
               icon: "location_on"
               text: "{{address}}"`,
-  poi: `page:
+  PoiList: `page:
   id: "PoiList"
   body:
     component_type: "Column"

@@ -14,6 +14,10 @@ export const renderComponent = (component: any, data: any, onInteraction?: (acti
   const properties = component.properties || {};
   const children = component.children || [];
 
+  if (type !== 'Text' && type !== 'SizedBox' && type !== 'Spacer' && type !== 'Padding' && type !== 'Align') {
+      console.log('[DslRenderer] Rendering:', type, 'Props:', JSON.stringify(properties || {}));
+  }
+
   // Special handling for Loop
   // Iterates over an array in 'data' and renders children for each item
   if (type === 'Loop') {
@@ -97,7 +101,8 @@ export const renderComponent = (component: any, data: any, onInteraction?: (acti
   });
 
   // Recursively render children
-  const childWidgets = children.map((child: any, index: number) => {
+  const childrenArray = Array.isArray(children) ? children : [];
+  const childWidgets = childrenArray.map((child: any, index: number) => {
      // Add key to children
      const childNode = renderComponent(child, data, onInteraction);
      if (React.isValidElement(childNode)) {
@@ -113,50 +118,73 @@ export const renderComponent = (component: any, data: any, onInteraction?: (acti
  * 解析可能包含类似 handlebars 语法 {{key}} 的字符串值
  */
 const resolveValue = (value: any, data: any): any => {
-  if (typeof value === 'string' && value.includes('{{') && value.includes('}}')) {
-    const reg = /{{(.*?)}}/g;
-    return value.replace(reg, (match, key) => {
-        // Handle | padLeft logic if present (simple version)
-        // The flutter regex was: r"{{\s*([^}|]+)\s*(\|\s*padLeft\((\d+),\s*\'(.)\'\))?\s*}}"
-        // We need to handle that if we want date formatting to work.
-        
-        let cleanKey = key.trim();
-        let padLen = 0;
-        let padChar = ' ';
-        
-        if (cleanKey.includes('|')) {
-            const parts = cleanKey.split('|');
-            cleanKey = parts[0].trim();
-            const pipe = parts[1].trim();
-            if (pipe.startsWith('padLeft')) {
-                const args = pipe.match(/padLeft\((\d+),\s*'(.)'\)/);
-                if (args) {
-                    padLen = parseInt(args[1]);
-                    padChar = args[2];
-                }
-            }
-        }
+  if (typeof value === 'string') {
+    // 1. Handle {{ }} syntax
+    if (value.includes('{{') && value.includes('}}')) {
+      const reg = /{{(.*?)}}/g;
+      return value.replace(reg, (match, key) => {
+          let cleanKey = key.trim();
+          let padLen = 0;
+          let padChar = ' ';
+          
+          if (cleanKey.includes('|')) {
+              const parts = cleanKey.split('|');
+              cleanKey = parts[0].trim();
+              const pipe = parts[1].trim();
+              if (pipe.startsWith('padLeft')) {
+                  const args = pipe.match(/padLeft\((\d+),\s*'(.)'\)/);
+                  if (args) {
+                      padLen = parseInt(args[1]);
+                      padChar = args[2];
+                  }
+              }
+          }
 
-        const val = resolvePath(cleanKey, data);
-        let str = val !== undefined && val !== null ? String(val) : '';
-        if (padLen > 0) {
-            str = str.padStart(padLen, padChar);
-        }
-        return str;
-    });
+          const val = resolvePath(cleanKey, data);
+          let str = val !== undefined && val !== null ? String(val) : '';
+          if (padLen > 0) {
+              str = str.padStart(padLen, padChar);
+          }
+          return str;
+      });
+    }
+    
+    // 2. Handle ${ } syntax
+    if (value.includes('${') && value.includes('}')) {
+       const reg = /\$\{(.*?)\}/g;
+       return value.replace(reg, (match, key) => {
+           // Strip optional "data." prefix if it doesn't match at root
+           const val = resolvePath(key.trim(), data);
+           return val !== undefined && val !== null ? String(val) : '';
+       });
+    }
   }
   return value;
 };
 
 const resolvePath = (key: string, data: any): any => {
-  const segments = key.split('.');
-  let current = data;
-  for (const seg of segments) {
-    if (current && typeof current === 'object' && seg in current) {
-      current = current[seg];
-    } else {
-      return undefined;
-    }
+  const getVal = (path: string, source: any) => {
+      const segments = path.split('.');
+      let current = source;
+      for (const seg of segments) {
+        if (current && typeof current === 'object' && seg in current) {
+          current = current[seg];
+        } else {
+          return undefined;
+        }
+      }
+      return current;
+  };
+  
+  // Try exact match
+  let result = getVal(key, data);
+  if (result !== undefined) return result;
+  
+  // Try stripping "data." prefix if present
+  if (key.startsWith('data.')) {
+      result = getVal(key.substring(5), data);
+      if (result !== undefined) return result;
   }
-  return current;
+  
+  return undefined;
 };

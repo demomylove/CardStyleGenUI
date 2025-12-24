@@ -3,8 +3,8 @@ module.exports = {
   apps: [{
     name: "genui-server",
     script: "./dist/server.js",
-    instances: "max",
-    exec_mode: "cluster",
+    instances: 1,
+    exec_mode: "fork",
     env: {
       NODE_ENV: "development",
     },

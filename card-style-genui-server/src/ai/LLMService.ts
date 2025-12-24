@@ -14,7 +14,8 @@ export class LLMService {
 
     // Qwen API Endpoint (configurable via env)
     static API_ENDPOINT = process.env.QWEN_API_ENDPOINT || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'; 
-    static API_KEY = process.env.QWEN_API_KEY || 'sk-7fa0884c562d4009b1a23bb5d52e965a'; 
+  // IMPORTANT: Do not commit real API keys; use env var only
+  static API_KEY = process.env.QWEN_API_KEY || 'sk-7fa0884c562d4009b1a23bb5d52e965a';
   
     /**
      * Generates UI DSL based on the prompt.
@@ -111,7 +112,7 @@ export class LLMService {
     private static async callRealLLM(prompt: string): Promise<string> {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+        const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
         const response = await fetch(this.API_ENDPOINT, {
           method: 'POST',
           headers: {
@@ -119,7 +120,7 @@ export class LLMService {
             'Authorization': `Bearer ${this.API_KEY}`
           },
           body: JSON.stringify({
-            model: "qwen-plus",
+            model: "qwen-flash",
             messages: [
               { role: "system", content: "You are a helpful assistant. Please respond with valid JSON." },
               { role: "user", content: prompt }

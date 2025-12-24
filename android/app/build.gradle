@@ -78,9 +78,15 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.cardstylegenui"
+
+    packagingOptions {
+        pickFirst '**/libc++_shared.so'
+        pickFirst '**/libjsc.so'
+    }
+    
     defaultConfig {
         applicationId "com.cardstylegenui"
-        minSdkVersion rootProject.ext.minSdkVersion
+        minSdkVersion 29
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
@@ -107,9 +113,15 @@ android {
     }
 }
 
+
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    
+    // 添加对 audio 模块的依赖
+    implementation(project(":audio"))
+    implementation(project(":common"))
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

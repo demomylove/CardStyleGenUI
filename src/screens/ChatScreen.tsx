@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   FlatList,
   TouchableOpacity,
   SafeAreaView,
@@ -13,6 +12,7 @@ import {
 import TaskCard, { TaskStatus } from '../components/TaskCard';
 import { omphalos, weather, music, poi } from '../api/senseClient';
 import { DslFactory } from '../dsl/DslFactory';
+import VoiceInput from '../components/VoiceInput';
 
 interface Message {
   id: string;
@@ -28,6 +28,15 @@ const ChatScreen = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lastCardMsgId, setLastCardMsgId] = useState<string | null>(null);
+
+  /**
+   * 检测用户消息是否为修改请求（而非新卡片请求）
+   */
+  const isModificationRequest = (text: string): boolean => {
+    const keywords = ['改', '换', '调整', '颜色', '标题', '字体', '大小', '修改', '背景', '样式'];
+    return keywords.some(k => text.includes(k));
+  };
 
   /**
    * 更新特定任务消息的状态。
@@ -49,9 +58,38 @@ const ChatScreen = () => {
    * 处理用户提交消息时的发送操作。
    * 启动 API 调用序列：意图识别 -> DSL -> 渲染。
    */
-  const handleSend = async () => {
-    const text = inputText.trim();
+  /**
+   * 处理用户提交消息时的发送操作。
+   * 启动 API 调用序列：意图识别 -> DSL -> 渲染。
+   * @param contentOptional 可选的直接文本输入（用于解决 ASR 异步 State 更新问题）
+   */
+  const handleSend = async (contentOptional?: string | any) => {
+    // 优先使用直接传入的文本（如果是字符串），否则使用 State 中的文本
+    // 注意：TouchableOpacity 的 onPress 会传入事件对象，需要忽略
+    let text = '';
+    if (typeof contentOptional === 'string') {
+        text = contentOptional;
+    } else {
+        text = inputText;
+    }
+    text = text.trim();
+    
     if (!text) return;
+
+    // 检测是否为修改请求
+    const isRequestModify = isModificationRequest(text);
+    
+    // 如果是修改请求但 lastCardMsgId 为空（可能是 Hot Reload 导致状态丢失），尝试从历史消息中找回
+    let targetId = lastCardMsgId;
+    if (isRequestModify && !targetId) {
+      const lastTaskMsg = [...messages].reverse().find(m => !m.isUser && m.task?.content);
+      if (lastTaskMsg) {
+        targetId = lastTaskMsg.id;
+        setLastCardMsgId(targetId);
+      }
+    }
+
+    const isModify = isRequestModify && targetId !== null;
 
     const userMsg: Message = {
       id: Date.now().toString() + '_user',
@@ -59,16 +97,26 @@ const ChatScreen = () => {
       text: text,
     };
 
-    const taskMsgId = Date.now().toString() + '_task';
-    const taskMsg: Message = {
-      id: taskMsgId,
-      isUser: false,
-      task: {
-        status: 'thinking',
-      },
-    };
+    let taskMsgId: string;
 
-    setMessages((prev) => [...prev, userMsg, taskMsg]);
+    if (isModify) {
+      // 修改模式：复用现有卡片，不创建新任务消息
+      taskMsgId = targetId!;
+      setMessages((prev) => [...prev, userMsg]);
+      updateTaskStatus(taskMsgId, 'drawing'); // 跳过 thinking，卡片保持可见
+    } else {
+      // 新卡片模式：创建新任务消息
+      taskMsgId = Date.now().toString() + '_task';
+      const taskMsg: Message = {
+        id: taskMsgId,
+        isUser: false,
+        task: {
+          status: 'thinking',
+        },
+      };
+      setMessages((prev) => [...prev, userMsg, taskMsg]);
+    }
+
     setInputText('');
     setLoading(true);
 
@@ -117,6 +165,7 @@ const ChatScreen = () => {
           ? (DslFactory as any).parseAny(dslString)
           : DslFactory.parseDsl(dslString);
         updateTaskStatus(taskMsgId, 'completed', widget);
+        setLastCardMsgId(taskMsgId); // 记住此卡片 ID，供后续修改使用
       } else {
         updateTaskStatus(taskMsgId, 'completed', (
           <View style={{ padding: 12 }}>
@@ -184,15 +233,16 @@ const ChatScreen = () => {
         />
 
         <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
+          <VoiceInput
+            style={styles.voiceInput}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="请输入..."
+            placeholder="请输入或点击麦克风说话..."
             onSubmitEditing={handleSend}
+            disabled={loading}
           />
           <TouchableOpacity onPress={handleSend} style={styles.sendButton} disabled={loading}>
-             <Text style={{ opacity: loading ? 0.3 : 1 }}>➡️</Text> 
+             <Text style={{ opacity: loading ? 0.3 : 1 }}>➡️</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -233,6 +283,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#DDD',
     alignItems: 'center',
+  },
+  voiceInput: {
+    flex: 1,
+    height: 40,
   },
   input: {
     flex: 1,

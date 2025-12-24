@@ -1,8 +1,7 @@
 // AMap Weather/Geocoding client for React Native
 // Uses axios (already in dependencies)
 import axios from 'axios';
-
-export const AMAP_KEY = 'df77469c39902532b069d6273e681c77';
+import { AMAP_KEY } from '../config/secrets';
 export const WEATHER_API_URL = 'https://restapi.amap.com/v3/weather/weatherInfo';
 export const GEOCODING_API_URL = 'https://restapi.amap.com/v3/geocode/geo';
 

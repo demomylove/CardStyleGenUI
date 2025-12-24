@@ -61,10 +61,13 @@ const getQueryParams = (input: string) => ({
   context_info: [],
 });
 
-// Common headers from C++ reference
+// Common headers
+// Move API key out of source control; read from local secrets (gitignored)
+import { SENSE_API_KEY } from '../config/secrets';
 const COMMON_HEADERS = {
     'Content-Type': 'application/json',
-    'apikey': 'iirzcvKiVDXCwdJzBf9ksw==' 
+    // Provide the key via src/config/secrets.ts (not committed). Placeholder will work but requests may be rejected.
+    'apikey': SENSE_API_KEY || ''
 };
 
 // Helper to parse weather information from natural language text
@@ -169,6 +172,9 @@ const streamRequest = (
   onData: (line: string) => void
 ): Promise<void> => {
   return new Promise((resolve, reject) => {
+    console.log('[API Request] URL:', url);
+    console.log('[API Request] Payload:', JSON.stringify(payload, null, 2));
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
     // Use common headers
@@ -192,7 +198,10 @@ const streamRequest = (
         incompleteData = lines.pop() || '';
         
         lines.forEach(line => {
-            if (line.trim().length > 0) onData(line);
+            if (line.trim().length > 0) {
+                console.log('[API Stream Response] URL:', url, 'Chunk:', line);
+                onData(line);
+            }
         });
       } else if (xhr.readyState === 4) { // Done
         // Process any remaining data
@@ -358,7 +367,14 @@ const postJsonWithFallback = async (path: string, body: any): Promise<Response> 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (resp.ok) return resp;
+      console.log('[API Post Request] URL:', url);
+      console.log('[API Post Request] Body:', JSON.stringify(body, null, 2));
+      
+      if (resp.ok) {
+        console.log('[API Post Response] Status:', resp.status);
+        return resp;
+      }
+      console.warn('[API Post Error] Status:', resp.status);
       lastErr = new Error(`HTTP ${resp.status} at ${url}`);
     } catch (e) {
       lastErr = e;
@@ -386,6 +402,7 @@ export const poi = async (input: string): Promise<string> => {
       const resp = await postJsonWithFallback('/api/chat/once', payload);
       if (!resp.ok) throw new Error(`Native server error: ${resp.status}`);
       const json = await resp.json();
+      console.log('[API POI Response] JSON:', JSON.stringify(json, null, 2));
 
       // Prefer server-provided dataContext.pois to build legacy string DSL
       if (json.dataContext && Array.isArray(json.dataContext.pois) && json.dataContext.pois.length > 0) {

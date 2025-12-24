@@ -1,7 +1,35 @@
-pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
+pluginManagement {
+    includeBuild("../node_modules/@react-native/gradle-plugin")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
 plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
+
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositories {
+        mavenLocal()
+        //首选国外镜像加快github CI
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+        maven { url 'https://120.25.164.233:8081/nexus/content/groups/public/' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        google { url = uri('https://maven.aliyun.com/repository/google') }
+        mavenCentral { url = uri('https://maven.aliyun.com/repository/public') }
+    }
+}
+
 rootProject.name = 'CardStyleGenUI'
 include ':app'
+include ':common'
+include ':audio'
+includeBuild 'spotifyAppRemote'
 includeBuild("../node_modules/@react-native/gradle-plugin")
 
